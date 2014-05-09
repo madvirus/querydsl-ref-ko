@@ -602,7 +602,7 @@ List<CatDTO> catDTOs = query.from(cat)
 표 2.2 숫자 매핑
 
 | 크기 | 자리(digits) | 타입 |
-|--|--|--|
+|---|---|---|
 | > 18 | 0 | BigInteger |
 | > 9 | 0 | Long |
 | > 4 | 0 | Integer |
