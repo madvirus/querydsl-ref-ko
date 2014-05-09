@@ -540,7 +540,7 @@ List<CatDTO> catDTOs = query.from(cat)
 표 2.1 파라미터
 
 | 이름 | 설명 |
-|-|-|
+|---|---|
 | jdbcDriver | JDBC 드라이버 클래스 이름 |
 | jdbcUrl | JDBC URL |
 | jdbcUser | DB 사용자 |
@@ -602,7 +602,7 @@ List<CatDTO> catDTOs = query.from(cat)
 표 2.2 숫자 매핑
 
 | 크기 | 자리(digits) | 타입 |
-|-|-|-|
+|--|--|--|
 | > 18 | 0 | BigInteger |
 | > 9 | 0 | Long |
 | > 4 | 0 | Integer |
