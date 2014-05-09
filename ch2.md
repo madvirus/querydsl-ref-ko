@@ -1411,5 +1411,248 @@ query
 ## 2.7 콜렉션 쿼리
 **[생략함]**
 
-## 2.8 스카라에서의 쿼리
-**[생략함]**
+## 2.8 Scala에서의 쿼리
+querydsl-scala 모듈을 사용하면 Scala에서 Querydsl을 사용할 수 있다. 이를 사용하려면 메이븐에 다음의 의존을 추가해주면 된다.
+```
+<dependency>
+  <groupId>com.mysema.querydsl</groupId>
+  <artifactId>querydsl-scala</artifactId>
+  <version>${querydsl.version}</version>
+</dependency>
+```
+
+### 2.8.1 Scala를 위한 DSL 표현식
+Scala 용 Querydsl은 표현식 생성을 위한 다른 DSL을 제공한다. Scala용 DSL은 연산자 오버로딩, 함수 포인터, 임의 임포트 등의 언어 기능을 활용해서 가독성과 간결함을 높였다.
+
+다음은 Scala 용 DSL의 개요를 정리한 것이다.
+
+```
+//표준                   Scala 대체
+
+expr isNotNull          expr is not(null)
+expr isNull             expr is null
+expr eq "Ben"           expr === "Ben"
+expr ne "Ben"           expr !== "Ben"
+expr append "X"         expr + "X"
+expr isEmpty            expr is empty
+expr isNotEmpoty        expr not empty
+
+// boolean
+left and right          left && right
+left or right           left || right
+expr not                !expr
+
+// comparison
+expr lt 5               expr < 5
+expr loe 5              expr <= 5
+expr gt 5               expr > 5
+expr goe 5              expr >= 5
+expr notBetween(2,6)    expr not between (2,6)
+expr negate             -expr
+ 
+// numeric
+expr add 3              expr + 3
+expr subtract 3         expr - 3
+expr divide 3           expr / 3
+expr multiply 3         expr * 3
+expr mod 5              expr % 5
+
+// collection
+list.get(0)             list(0)
+map.get("X")            map("X")
+```
+
+### 2.8.2 향상된 프로젝션
+
+Querydsl Scala 모듈은 Querydsl 쿼리 프로젝션을 좀더 Scala에 맞게 만들기 위해 임의 변환(Implicit conversion)을 제공한다.
+
+Querydsl 쿼리에서 Scala 프로젝션을 쓰려면 RichProjectable와 RichSimpleProjectable 래퍼를 사용해야 한다. com.mysema.query.scala.Helpers의 컨텐트를 임포트하면 필요한 임의 변환이 사용 가능해진다.
+
+예를 들어, 다음 쿼리는 표준 API를 사용하고 있으며 Object[] 타입의 java.util.List를 리턴한다.
+
+```
+query.from(person).list(person.firstName, person.lastName, person.age)
+```
+
+추가된 컨버전을 사용하면, ㅣist 대신에 Scala list 타입 결과를 리턴하는 select를 사용하거나 uniqueResult/singleResult 대신에 Option 타입 결과를 제공하는 unique/single을 사용할 수 있다.
+
+앞서 쿼리를 임의 컨버전을 사용하면 다음과 같이 표현할 수 있다.
+```
+import com.mysema.query.scala.Helpers._
+
+query.from(person).select(person.firstName, person.lastName, person.age)
+```
+이 경우 결과 타입은 List[(String,String,Integer)] 즉, Tuple3[String,String,Integer]의 List가 된다.
+
+### 2.8.3 SQL을 이용한 쿼리
+자바 용 Querydsl SQL처럼 쿼리를 생성할 때 사용할 Query 타입을 생성해야 한다. 다음은 생성 방법을 보여주는 예제 코드이다.
+
+빈 타입 없이 생성:
+
+```
+val directory = new java.io.File("target/jdbcgen1")
+val namingStrategy = new DefaultNamingStrategy()
+val exporter = new MetaDataExporter()
+exporter.setNamePrefix("Q")
+exporter.setPackageName("com.mysema")
+exporter.setSchemaPattern("PUBLIC")
+exporter.setTargetFolder(directory)
+exporter.setSerializerClass(classOf[ScalaMetaDataSerializer])
+exporter.setCreateScalaSources(true)
+exporter.setTypeMappings(ScalaTypeMappings.create)
+exporter.export(connection.getMetaData)
+```
+
+빈 타입을 이용한 생성:
+```
+val directory = new java.io.File("target/jdbcgen2")
+val namingStrategy = new DefaultNamingStrategy()
+val exporter = new MetaDataExporter()
+exporter.setNamePrefix("Q")
+exporter.setPackageName("com.mysema")
+exporter.setSchemaPattern("PUBLIC")
+exporter.setTargetFolder(directory)
+exporter.setSerializerClass(classOf[ScalaMetaDataSerializer])
+exporter.setBeanSerializerClass(classOf[ScalaBeanSerializer])
+exporter.setCreateScalaSources(true)
+exporter.setTypeMappings(ScalaTypeMappings.create)
+exporter.export(connection.getMetaData)
+```
+
+#### 2.8.3.1 간편 쿼리
+
+Querydsl Scala는 Querydsl SQL을 위한 간편 쿼리 구문을 제공한다. 이 구문은 Rogue 프레임워크와 같은 도메인 지향 쿼리 구문에서 영감을 얻었다.
+
+임의 변환을 이용해서 RelationalPath 인스턴스를 쿼리로 변환하는 방법으로 도메인 지향 쿼리를 구현했다.
+서비스나 DAO 클래스가 com.mysema.query.scala.sql.SQLHelpers 트레잇을 구현해서 이 기능을 사용할 수 있다.
+
+이 간편 구문을 사용하려면, 쿼리를 위한 시작점으로 테마 모델 클래스를 사용할 수 있다.
+
+다음과 같은 일반 구문을 사용하는 대신
+
+```
+query().from(employee).select(employee.firstName, employee.lastName)
+```
+
+Employee나 QEmployee의 컴패니언 객체를 사용해서 다음과 같이 작성할 수 있다.
+
+```
+Employee.select(_.firstName, _.lastName)
+```
+
+표현식에 orderBy, where, select, single 그리고 unique를 제공하는 대신, 쿼리의 루트 표현식을 파라미터로 받고 다른 표현식을 리턴하는 함수를 제공할 수 있다. 다음은 위 코드를 확장한 것이다.
+
+```
+Employee.select({ e => e.firstName }, { e => e.lastName })
+```
+자세한 내용은 com.mysema.query.scala.sql.RichSimpleQuery 클래스 문서를 참고하자.
+
+#### 2.8.3.2 코드 생성
+
+querydsl-maven-plugin 플러그인을 사용해서 SQL 메타타입과 프로젝션을 위한 Scala 소스를 생성할 수 있다. 다음은 설정 예시이다.
+
+```
+<plugin>
+  <groupId>com.mysema.querydsl</groupId>
+  <artifactId>querydsl-maven-plugin</artifactId>
+  <version>${querydsl.version}</version>
+  <configuration>
+    <jdbcDriver>com.mysql.jdbc.Driver</jdbcDriver>
+    <jdbcUrl>jdbc:mysql://localhost:3306/test</jdbcUrl>
+    <jdbcUser>matko</jdbcUser>
+    <jdbcPassword>matko</jdbcPassword>
+    <packageName>com.example.schema</packageName>
+    <targetFolder>${project.basedir}/src/main/scala</targetFolder>
+    <exportBeans>true</exportBeans>
+    <createScalaSources>true</createScalaSources>
+  </configuration>
+  <dependencies>
+    <dependency>
+      <groupId>mysql</groupId>
+	  <artifactId>mysql-connector-java</artifactId>
+      <version>5.1.16</version>
+	</dependency>
+	  <dependency>
+    	<groupId>com.mysema.querydsl</groupId>
+    	<artifactId>querydsl-scala</artifactId>
+    	<version>${querydsl.version}</version>
+  	  </dependency>
+  	  <dependency>
+    	<groupId>org.scala-lang</groupId>
+    	<artifactId>scala-library</artifactId>
+    	<version>${scala.version}</version>
+  	  </dependency>
+  </dependencies>
+</plugin>
+```
+querydsl:export 골을 실행하면 된다.
+
+### 2.8.4 다른 백엔드를 위한 쿼리
+다른 백엔드에 대해 쿼리를 할 때, Expresssion 모델을 수동으로 만들거나 별칭 기능을 사용해야 한다.
+
+JPA를 이용한 예제:
+
+```
+@Entity
+class User {
+  @BeanProperty
+  @Id
+  var id: Integer = _;
+  @BeanProperty
+  var userName: String = _;
+  @BeanProperty
+  @ManyToOne
+  var department: Department = _;
+}
+
+@Entity
+class Department {
+  @BeanProperty
+  @Id
+  var id: Integer = _;
+  @BeanProperty
+  var name: String = _;
+}
+```
+
+다음은 몇 가지 쿼리 예제이다.
+
+List
+```
+val person = Person as "person"
+
+query.from(person).where(person.firstName like "Rob%").list(person)
+```
+
+고유 결과(Unique result)
+```
+query.from(person).where(person.firstName like "Rob%").unique(person)
+```
+
+Long where
+```
+query.from(person)
+  .where(person.firstName like "Rob%", person.lastName like "An%")
+  .list(person)
+```
+
+정렬
+```
+query.from(person).orderBy(person.firstName asc).list(person)
+```
+
+Not null
+```
+query.from(person) 
+  .where(person.firstName isEmpty, person.lastName isNotNull) 
+  .list(person)
+```
+위 코드에서 쿼리 생성을 위한 팩토리 메서드는 아래와 같다.
+```
+def query() = new JPAQuery(entityManager)
+```
+위 코드에서 다음과 같은 변수도 필요하다.
+```
+val person = Person as "person"
+```
+주의: XML 설정을 이용해서 Hibernate를 사용할 경우 Scala 지원을 사용할 수 없다. HibernateDomainExporter는 현재 자바 소스 파일에 대해서만 동작한다.
