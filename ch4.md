@@ -33,3 +33,34 @@ Caused by: java.lang.IllegalArgumentException: Insufficient type arguments for L
 
     private Map<String,Employee> employeesByName; // RIGHT
 ```
+
+## 4.2 멀티쓰레드 환경에서 Querydsl Q타입의 초기화
+Q타입이 순환 의존을 가질 경우, 멀티 쓰레드 환경에서 Q타입을 초기화하면 데드락이 발생할 수 있다.
+
+이에 대한 가장 쉬운 해결책은 멀티쓰레드 환경에서 사용되기 전에 단일 쓰레드에서 클래스를 초기화하는 것이다.
+
+이런 목적으로 com.mysema.util.ClassPathUtils 클래스를 사용할 수 있다.
+
+```
+ClassPathUtils.scanpackage(Thread.currentThread().getContextClassLoader(), packageToLoad);
+```
+
+packageToLoad를 실제 초기화하길 원하는 클래스의 패키지로 바꾸면 된다.
+
+## 4.3 JDK5 사용
+
+JDK 5로 프로젝트를 컴파일할 때, 다음과 같이 컴파일이 실패할 수 있다.
+
+```
+[INFO] ------------------------------------------------------------------------
+[ERROR] BUILD FAILURE
+[INFO] ------------------------------------------------------------------------
+[INFO] Compilation failure
+...
+class file has wrong version 50.0, should be 49.0
+The class file version 50.0 is used by Java 6.0, and 49.0 is used by Java 5.0.
+```
+JDK 6.0 이후 버전에서 사용가능한 APT를 광범위하게 사용하고 있기 때문에, Querydsl을 JDK 6.0에서만 테스트 했다.
+
+만약 JDK 5.0에서 Querydsl을 사용하길 원한다면 Querydsl 자체를 직접 컴파일해야 한다.
+
