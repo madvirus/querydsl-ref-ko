@@ -251,7 +251,7 @@ from Cat as cat
 
 ### 2.1.8 일반 용법
 
-JPQLQuery 인터페이스의 연결되는 메서드는 다음과 같다.
+JPQLQuery 인터페이스의 cascading 메서드는 다음과 같다.
 
 *from*: 쿼리 소스를 추가한다.
 
@@ -683,3 +683,733 @@ H2Templates.builder()
      .build();      // to get the customized SQLTemplates instance
 ```
 
+Configuration 클래스를 이용하면 setUseLiterals(true)를 통한 리터럴의 직접 직렬화 활성, 스키마와 테이블 재정의, 커스텀 타입을 등록할 수 있다. 완전한 내용은 javadoc의 Configuration를 참고한다.
+
+### 2.3.6 쿼리
+
+Querydsl SQL을 이용해서 쿼리하는 방법은 다음처럼 간단하다.
+
+```
+QCustomer customer = new QCustomer("c");
+
+SQLQuery query = new SQLQuery(connection, configuration); 
+List<String> lastNames = query.from(customer)
+    .where(customer.firstName.eq("Bob"))
+    .list(customer.lastName);
+```
+위 코드는 다음의 SQL로 변환되어 실행된다. (테이블 이름은 customer, 컬럼 이름은 first_name, last_name이라고 가정)
+```
+SELECT c.last_name
+FROM customer c
+WHERE c.first_name = 'Bob'
+```
+
+### 2.3.7 일반 용법
+
+SQLQuery 클래스의 cascading 메서드는 다음과 같다.
+
+*from*: 쿼리 소스를 추가한다.
+
+*innerJoin, join, leftJoin, fullJoin, on*: 조인 부분을 추가한다. 조인 메서드에서 첫 번째 인자는 조인 소스이고, 두 번재 인자는 대상(별칭)이다.
+
+*where*: 쿼리 필터를 추가한다. 가변인자나 and/or 메서드를 이용해서 필터를 추가한다.
+
+*groupBy*: 가변인자 형식의 인자를 기준으로 그룹을 추가한다.
+
+*having*: Predicate 표현식을 이용해서 "group by" 그룹핑의 필터를 추가한다.
+
+*orderBy*: 정렬 표현식을 이용해서 정렬 순서를 지정한다. 숫자나 문자열에 대해서는 asc()나 desc()를 사용하고, OrderSpecifier에 접근하기 위해 다른 비교 표현식을 사용한다.
+
+*limit, offset, restrict*: 결과의 페이징을 설정한다. limit은 최대 결과 개수, offset은 결과의 시작 행, restrict는 limit과 offset을 함께 정의한다.
+
+### 2.3.8 조인
+다음 구문을 이용해서 조인을 한다.
+```
+QCustomer customer = QCustomer.customer;
+QCompany company = QCompany.company;
+query.from(customer)
+    .innerJoin(customer.company, company)
+    .list(customer.firstName, customer.lastName, company.name);
+```
+레프트 조인은 다음과 같다.
+```
+query.from(customer)
+    .leftJoin(customer.company, company)
+    .list(customer.firstName, customer.lastName, company.name);
+```
+조인 조건을 쓸 수도 있다.
+```
+query.from(customer)
+    .leftJoin(company).on(customer.company.eq(company.id))
+    .list(customer.firstName, customer.lastName, company.name);
+```
+
+### 2.3.9 정렬
+다음은 정렬 구문이다.
+```
+query.from(customer)
+    .orderBy(customer.lastName.asc(), customer.firstName.asc())
+    .list(customer.firstName, customer.lastName);
+```
+위 코드 아래 SQL 쿼리와 동등하다.
+```
+SELECT c.first_name, c.last_name
+FROM customer c
+ORDER BY c.last_name ASC, c.first_name ASC
+```
+
+### 2.3.10 그룹핑
+다음 형식을 이용해서 그룹핑을 한다.
+```
+query.from(customer)
+    .groupBy(customer.lastName)
+    .list(customer.lastName);
+```
+다음은 위 코드에 해당하는 SQL 쿼리다.
+```
+SELECT c.last_name
+FROM customer c
+GROUP BY c.last_name
+```
+
+### 2.3.11 서브쿼리
+서브쿼리를 만들려면 SQLSubQuery를 사용하면 된다. 서브쿼리를 만들려면 JPASubQuery를 사용하면 된다. 서브쿼리를 만들기 위해 from 메서드로 쿼리 파라미터를 정의하고, unique나 list를 이용한다. unique는 단일 결과를 위해 사용하고 list는 리스트 결과를 위해 사용한다. 서브쿼리도 쿼리처럼 타입에 안전한 Querydsl 표현식이다.
+
+```
+QCustomer customer = QCustomer.customer;
+QCustomer customer2 = new QCustomer("customer2");
+query.from(customer).where(
+  customer.status.eq(new SQLSubQuery().from(customer2).unique(customer2.status.max()))
+  .list(customer.all())
+```
+
+다른 예제
+```
+QStatus status = QStatus.status;
+query.from(customer).where(
+  customer.status.in(new SQLSubQuery().from(status).where(status.level.lt(3)).list(status.id))
+  .list(customer.all())
+```
+
+### 2.3.12 리터럴 조회
+리터럴을 조회하려면, 다음과 같이 constant 인스턴스를 생성해주면 된다.
+
+```
+query.list(Expressions.constant(1),
+           Expressions.constant("abc"));
+```
+com.mysema.query.support.Expressions 클래스는 프로젝션, 오퍼레이션, 템플릿 생성을 위한 유용한 정적 메서드도 제공한다.
+
+### 2.3.13 쿼리 확장 지원
+엔진에 특화된 구문을 사용하려면 커스텀 쿼리 확장을 사용한다. 커스텀 쿼리 확장은 AbstractSQLQuery를 상속받아 구현할 수 있다. 다음은 MySQLQuery 클래스에서 플래그를 추가하는 예를 보여주고 있다.
+```
+public class MySQLQuery extends AbstractSQLQuery<MySQLQuery> {
+
+    public MySQLQuery(Connection conn) {
+        this(conn, new MySQLTemplates(), new DefaultQueryMetadata());
+    }
+
+    public MySQLQuery(Connection conn, SQLTemplates templates) {
+        this(conn, templates, new DefaultQueryMetadata());
+    }
+
+    protected MySQLQuery(Connection conn, SQLTemplates templates, QueryMetadata metadata) {
+        super(conn, new Configuration(templates), metadata);
+    }
+
+    public MySQLQuery bigResult(){
+        return addFlag(Position.AFTER_SELECT, "SQL_BIG_RESULT ");
+    }
+
+    public MySQLQuery bufferResult(){
+        return addFlag(Position.AFTER_SELECT, "SQL_BUFFER_RESULT ");
+    }
+
+
+    // ...
+}
+```
+플래그는 직렬화 과정에서 특정 위치에 삽입될 수 있는 커스텀 SQL 부분 코드다.
+com.mysema.query.QueryFlag.Position 열거 타입에 지원되는 위치가 정의되어 있다.
+
+### 2.3.14 윈도우 함수
+Querydsl은 SQLExpressions 클래스를 통해서 윈도우 함수를 지원한다.
+
+다음은 사용 예다.
+
+```
+query.from(employee)
+    .list(SQLExpressions.rowNumber()
+        .over()
+        .partitionBy(employee.name)
+        .orderBy(employee.id));
+```
+
+### 2.3.15 다른 SQL 표현식
+SQLExpressions 클래스의 정적 메서드를 이용해서 다른 SQL 표현식을 사용할 수 있다.
+
+### 2.3.16 DML 명령 사용하기
+Querydsl SQL 모듈의 모든 DMLClause 구현체는 Connection, 쿼리에 사용될 SQLTemplate, DMLClause와 엮일 메인 엔티티의 세 개 파라미터를 필요로 한다.
+
+#### 2.3.16.1 삽입
+컬럼 지정
+```
+QSurvey survey = QSurvey.survey;
+
+new SQLInsertClause(conn, configuration, survey)
+    .columns(survey.id, survey.name)
+    .values(3, "Hello").execute();
+```
+
+컬럼 없이
+```
+new SQLInsertClause(conn, configuration, survey)
+    .values(4, "Hello").execute();
+```
+
+서브쿼리 이용
+```
+new SQLInsertClause(conn, configuration, survey)
+    .columns(survey.id, survey.name)
+    .select(new SQLSubQuery().from(survey2).list(survey2.id.add(1), survey2.name))
+    .execute();
+```
+
+서브쿼리 이용, 컬럼 없이
+```
+new SQLInsertClause(conn, configuration, survey)
+    .select(new SQLSubQuery().from(survey2).list(survey2.id.add(10), survey2.name))
+    .execute();
+```
+columns/values 메서드 사용하지 않고, set 메서드를 이용
+```
+QSurvey survey = QSurvey.survey;
+
+new SQLInsertClause(conn, configuration, survey)
+    .set(survey.id, 3)
+    .set(survey.name, "Hello").execute();
+```
+위 코드는 첫 번째 예제와 동일하다. set 메서드를 사용하면 내부적으로 columns/values가 사용된다.
+
+아래 형식의 코드에서는 컬럼과 쿼리 결과 집합을 매핑하는 것에 주의하자.
+
+```
+columns(...).select(...)
+```
+
+변경된 행 개수 대신 생성된 키를 구하고 싶다면 executeWithKey/s 메서드를 사용한다.
+
+```
+set(...)
+```
+
+위 코드는 한 개 컬럼을 매핑한다. 서브 쿼리 결과가 없으면 null을 사용한다.
+
+빈의 데이터에 기반해서 clause 인스턴스를 생성하려면 다음의 코드를 사용한다.
+
+```
+new SQLInsertClause(conn, configuration, survey)
+    .populate(surveyBean).execute();
+```
+위 코드는 빈의 데이터 중 null은 제외한다. null도 포함시키고 싶다면 아래 코드를 사용한다.
+```
+new SQLInsertClause(conn, configuration, survey)
+    .populate(surveyBean, DefaultMapper.WITH_NULL_BINDINGS).execute();
+```
+
+#### 2.3.16.2 수정
+where 절 포함
+```
+QSurvey survey = QSurvey.survey;
+
+new SQLUpdateClause(conn, configuration, survey)
+    .where(survey.name.eq("XXX"))
+    .set(survey.name, "S")
+    .execute();
+```
+where 없이
+```
+new SQLUpdateClause(conn, configuration, survey)
+    .set(survey.name, "S")
+    .execute();
+```
+빈을 이용
+```
+new SQLUpdateClause(conn, configuration, survey)
+    .populate(surveyBean)
+    .execute();
+```
+
+### 2.3.16.3 삭제
+where 절 포함
+```
+QSurvey survey = QSurvey.survey;
+
+new SQLDelecteClause(conn, configuration, survey)
+    .where(survey.name.eq("XXX"))
+    .execute();
+```
+where 없이
+```
+new SQLDelecteClause(conn, configuration, survey)
+    .execute()
+```
+
+### 2.3.17 DMLClause의 배치 지원
+Querydsl SQL은 DML API를 통해서 JDBC 배치 업데이터를 지원한다. 같은 구조를 갖는 DML을 연속해서 실행할 경우, addBatch() 메서드를 이용해서 한 DMLClause로 묶을 수 있다.
+
+수정:
+```
+QSurvey survey = QSurvey.survey;
+
+insert(survey).values(2, "A").execute();
+insert(survey).values(3, "B").execute();
+
+SQLUpdateClause update = update(survey);
+update.set(survey.name, "AA").where(survey.name.eq("A")).addBatch();
+update.set(survey.name, "BB").where(survey.name.eq("B")).addBatch();
+```
+
+삭제:
+```
+insert(survey).values(2, "A").execute();
+insert(survey).values(3, "B").execute();
+
+SQLDeleteClause delete = delete(survey);
+delete.where(survey.name.eq("A")).addBatch();
+delete.where(survey.name.eq("B")).addBatch();
+assertEquals(2, delete.execute());
+```
+
+삽입:
+```
+SQLInsertClause insert = insert(survey);
+insert.set(survey.id, 5).set(survey.name, "5").addBatch();
+insert.set(survey.id, 6).set(survey.name, "6").addBatch();
+assertEquals(2, insert.execute());
+```
+
+### 2.3.18 빈 클래스 생성
+MetaDataExporter를 이용해서 테이블에 대한 자바빈 DTO 타입을 생성한다.
+```
+java.sql.Connection conn = ...;
+MetaDataExporter exporter = new MetaDataExporter();
+exporter.setPackageName("com.myproject.mydomain");
+exporter.setTargetFolder(new File("src/main/java"))	;
+exporter.setBeanSerializer(new BeanSerializer());
+exporter.export(conn.getMetaData());
+```
+DMLClause의 populate 메서드의 인자로 빈 타입을 사용할 수 있으며, 쿼리에서 빈 타입을 직접 선택할 수 있다. 다음은 JUnit으로 작성한 간단한 예이다.
+
+```
+QEmployee e = new QEmployee("e");
+
+// Insert
+Employee employee = new Employee();
+employee.setFirstname("John");
+Integer id = insert(e).populate(employee).executeWithKey(e.id);
+employee.setId(id);
+
+// Update
+employee.setLastname("Smith");
+assertEquals(1l, update(e).populate(employee).where(e.id.eq(employee.getId())).execute());
+
+// Query
+Employee smith = query().from(e).where(e.lastname.eq("Smith")).uniqueResult(e);
+assertEquals("John", smith.getFirstname());
+
+// Delete
+assertEquals(1l, delete(e).where(e.id.eq(employee.getId())).execute());
+```
+앞서 예제에서 사용한 팩토리 메서드는 다음과 같다.
+
+```
+protected SQLUpdateClause update(RelationalPath<?> e){
+    return new SQLUpdateClause(Connections.getConnection(), templates, e);
+}
+
+protected SQLInsertClause insert(RelationalPath<?> e){
+    return new SQLInsertClause(Connections.getConnection(), templates, e);
+}
+
+protected SQLDeleteClause delete(RelationalPath<?> e){
+    return new SQLDeleteClause(Connections.getConnection(), templates, e);
+}
+
+protected SQLMergeClause merge(RelationalPath<?> e){
+    return new SQLMergeClause(Connections.getConnection(), templates, e);
+}
+
+protected SQLQuery query() {
+    return new SQLQuery(Connections.getConnection(), templates);
+}
+```
+
+### 2.3.19 SQL 쿼리와 바인딩 추출하기
+
+getSQL 메서드를 통해서 SQL 쿼리와 바인딩 값을 구할 수 있다.
+
+```
+SQLBindings bindings = query.getSQL(customer.id, customer.firstname, customer.lastname);
+System.out.println(bindings.getSQL());
+```
+SQL 문자열에 포함된 모든 리터럴이 필요하다면, setUseLiterals(true)를 이용해서 쿼리의 리터럴 직렬화를 활성화하면 된다.
+
+### 2.3.20 커스텀 타입
+
+Querydsl SQL은 ResultSet/Statement에서 커스텀 타입 매핑을 지원한다. com.mysema.query.sql.Configuration 객체를 이용해서 커스텀 카입 매핑을 등록한다. Configuration 객체는 실제 쿼리의 생성자 인자로 제공된다.
+
+```
+Configuration configuration = new Configuration(new H2Templates());
+// overrides the mapping for Types.DATE
+configuration.register(new UtilDateType());
+```
+
+특정 테이블 컬럼을 위한 커스텀 타입 매핑 등록
+```
+Configuration configuration = new Configuration(new H2Templates());
+// declares a maping for the gender column in the person table
+configuration.register("person", "gender",  new EnumByNameType<Gender>(Gender.class));
+```
+숫자에 대한 커스텀 타입 매핑을 등록하려면 registerNumeric 메서드를 사용한다.
+
+```
+configuration.registerNumeric(5,2,Float.class);
+```
+이는 Float 타입을 NUMERIC(5,2) 타입으로 매핑한다.
+
+### 2.3.21 Query와 Clause 리스닝
+
+SQLListener는 쿼리와 DMLClause를 리스닝 할 때 사용되는 리스너 인터페이스이다. Configuration이나 Query, Clause의 addListener 메서드를 통해서 SQLListener 객체를 등록할 수 있다.
+
+리스너의 적용 예로는 데이터 동기화, 로깅, 캐싱, 검증이 있다.
+
+## 2.4 루신 쿼리
+
+이 절에서는 루신 모듈의 쿼리 기능을 설명한다.
+
+### 2.4.1 메이븐 통합
+
+Querydsl 루신을 사용하려면 루신3은 querydsl-lucene3 모듈을 그리고 루신4는 querydsl-lucene4 모듈을 사용한다.
+
+루신 3:
+```
+<dependency>
+  <groupId>com.mysema.querydsl</groupId>
+  <artifactId>querydsl-lucene3</artifactId>
+  <version>${querydsl.version}</version>
+</dependency>
+
+<dependency>
+  <groupId>org.slf4j</groupId>
+  <artifactId>slf4j-log4j12</artifactId>
+  <version>1.6.1</version>
+</dependency>
+```
+루신 4:
+```
+<dependency>
+  <groupId>com.mysema.querydsl</groupId>
+  <artifactId>querydsl-lucene4</artifactId>
+  <version>${querydsl.version}</version>
+</dependency>
+
+<dependency>
+  <groupId>org.slf4j</groupId>
+  <artifactId>slf4j-log4j12</artifactId>
+  <version>1.6.1</version>
+</dependency>
+```
+### 2.4.2 쿼리 타입 생성
+다음과 같은 방식으로 year와 title 필드를 가진 쿼리 타입을 직접 작성할 수 있다.
+
+```
+public class QDocument extends EntityPathBase<Document>{
+    private static final long serialVersionUID = -4872833626508344081L;
+
+    public QDocument(String var) {
+        super(Document.class, PathMetadataFactory.forVariable(var));
+    }
+
+    public final StringPath year = createString("year");
+
+    public final StringPath title = createString("title");
+}
+```
+QDocument는 year와 title 필드를 가진 루신 Document를 표현한다.
+
+루신의 경우 스키마 데이터를 사용할 수 없기 때문에 코드 생성 기능을 사용할 수 없다.
+
+### 2.4.3 쿼리
+
+Querydsl 루신으로 쿼리하는 것은 간단하다.
+
+```
+QDocument doc = new QDocument("doc");
+
+IndexSearcher searcher = new IndexSearcher(index);
+LuceneQuery query = new LuceneQuery(true, searcher);
+List<Document> documents = query
+    .where(doc.year.between("1800", "2000").and(doc.title.startsWith("Huckle"))
+    .list();
+```
+
+위 코드는 다음의 루신 쿼리로 바뀐다.
+
+```
++year:[1800 TO 2000] +title:huckle*
+```
+
+### 2.4.4 일반 용법
+
+LuceneQuery 클래스의 cascading 메서드는 다음과 같다.
+
+*where*: 쿼리 필터를 추가한다. 가변인자나 and/or 메서드를 이용해서 필터를 추가한다. PStrings에 수행되는 오퍼레이션을 지원한다. (matches, indexOf, charAt은 제외). 현재 in은 지원되지 않으며, 향후 지원할 예정이다.
+
+*orderBy*: 정렬 표현식을 이용해서 정렬 순서를 지정한다. 숫자나 문자열에 대해서는 asc()나 desc()를 사용하고, OrderSpecifier에 접근하기 위해 다른 비교 표현식을 사용한다.
+
+*limit, offset, restrict*: 결과의 페이징을 설정한다. limit은 최대 결과 개수, offset은 결과의 시작 행, restrict는 limit과 offset을 함께 정의한다.
+
+### 2.4.5 정렬
+
+정렬 구문은 다음과 같다.
+```
+query
+    .where(doc.title.like("*"))
+    .orderBy(doc.title.asc(), doc.year.desc())
+    .list();
+```
+위 코드는 다음 루신 쿼리와 동일하다.
+
+```
+title:*
+```
+title과 year의 오름차순으로 결과를 정렬한다.
+
+sort 메서드와 Sort 인스턴스를 사용해서 정렬을 지정할 수 있다.
+
+```
+Sort sort = ...; 
+query
+    .where(doc.title.like("*"))
+    .sort(sort)
+    .list();
+```
+
+### 2.4.6 결과 개수 제한
+
+결과 개수 제한은 다음과 같이 한다.
+
+```
+query
+    .where(doc.title.like("*"))
+    .limit(10)
+    .list();
+```
+
+### 2.4.7 오프셋
+
+오프셋은 다음과 같이 지정한다.
+```
+query
+    .where(doc.title.like("*"))
+    .offset(3)
+    .list();
+```
+
+### 2.4.8 퍼지(fuzzy) 검색
+com.mysema.query.lucene.LuceneExpressions 클래스에서 정의된 fuzzyLike 메서드를 이용해서 퍼지 검색을 할 수 있다.
+
+```
+query
+    .where(LuceneExpressions.fuzzyLike(doc.title, "Hello"))
+    .list();
+```
+
+### 2.4.9 루신 필터를 쿼리에 적용하기
+
+단일 루신 필터를 쿼리에 적용할 수 있다.
+
+```
+query
+    .where(doc.title.like("*"))
+    .filter(filter)
+    .list();
+```
+distinct 필터링을 위한 distinct(Path) 메서드를 제공한다.
+
+```
+query
+    .where(doc.title.like("*"))
+    .distinct(doc.title)
+    .list();
+```
+
+## 2.5 Hibernate Search 쿼리
+Hibernate Search 모듈의 쿼리 기능을 설명한다.
+
+### 2.5.1 Querydsl 쿼리 타입 생성
+
+쿼리 타입을 생성하는 방법은 본 문서의 JPA 쿼리 부분을 참고한다.
+
+### 2.5.2 쿼리
+
+Querydsl Hibernate Search를 이용한 쿼리는 다음과 같이 간단하다.
+
+```
+QUser user = QUser.user;
+SearchQuery<User> query = new SearchQuery<User>(session, user);
+List<User> list = query
+	.where(user.firstName.eq("Bob"))
+	.list();
+```
+
+### 2.5.3 일반 용법
+
+일반 용법은 Querying Lucene의 일반 용법을 참고한다.
+
+쿼리 직렬화 과정에서 Querydsl Lucene module과의 유일한 차이점은 경로를 다르게 처리한다는 것이다. org.hibernate.search.annotations.Field 어노테이션이 적용된 프로퍼티인 경우, 필드 이름에 대한 대체 방법으로 name 속성의 값을 사용한다.
+
+### 2.6 Mongodb 쿼리
+
+Mongodb 모듈의 조회 기능을 설명한다.
+
+### 2.6.1 메이븐 통합
+
+메이븐 프로젝트에 다음 의존을 추가한다.
+
+```
+<dependency>
+  <groupId>com.mysema.querydsl</groupId>
+  <artifactId>querydsl-apt</artifactId>
+  <version>${querydsl.version}</version>
+  <scope>provided</scope>
+</dependency>
+
+<dependency>
+  <groupId>com.mysema.querydsl</groupId>
+  <artifactId>querydsl-mongodb</artifactId>
+  <version>${querydsl.version}</version>
+</dependency>
+
+<dependency>
+  <groupId>org.slf4j</groupId>
+  <artifactId>slf4j-log4j12</artifactId>
+  <version>1.6.1</version>
+</dependency>
+```
+Querydsl을 이용해서 쿼리 타입을 생성하기 위해 메이븐 APT 플러그인을 설정한다.
+```
+<project>
+  <build>
+    <plugins>
+      ...
+      <plugin>
+        <groupId>com.mysema.maven</groupId>
+        <artifactId>apt-maven-plugin</artifactId>
+        <version>1.0.9</version>
+        <executions>
+          <execution>
+            <goals>
+              <goal>process</goal>
+            </goals>
+            <configuration>
+              <outputDirectory>target/generated-sources/java</outputDirectory>
+              <processor>com.mysema.query.apt.morphia.MorphiaAnnotationProcessor</processor>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
+    ...
+    </plugins>
+  </build>
+</project>
+```
+MorphiaAnnotationProcessor는 com.google.code.morphia.annotations.Entity 어노테이션이 적용된 도메인 타입을 위한 Querydsl 쿼리 타입을 생성한다.
+
+`mvn clean install`을 실행하면 target/generated-sources/java 폴더에 쿼라 타입 코드가 생성된다.
+
+이클립스를 사용중이면, `mvn eclipse:eclipse'을 실행해서 target/generated-sources/java을 이클립스 프로젝트의 소스 폴더에 포함시킨다.
+
+이제 쿼리 도메인 모델을 이용해서 Mongodb를 조회할 수 있다.
+
+### 2.6.2 쿼리
+
+Querydsl Mongodb를 이용하면 다음과 같이 간단하게 쿼리할 수 있다.
+```
+Morphia morphia;
+Datastore datastore;
+// ...
+QUser user = new QUser("user");
+MorphiaQuery<User> query = new MorphiaQuery<User>(morphia, datastore, user);
+List<User> list = query
+	.where(user.firstName.eq("Bob"))
+	.list();
+```
+
+### 2.6.3 일반 용법
+
+MongodbQuery 클래스의 cascading 메서드는 다음과 같다.
+
+ere*: 쿼리 필터를 추가한다. 가변인자나 and/or 메서드를 이용해서 필터를 추가한다. PStrings에 수행되는 오퍼레이션을 지원한다. (matches, indexOf, charAt은 제외). 현재 in은 지원되지 않으며, 향후 지원할 예정이다.
+
+*orderBy*: 정렬 표현식을 이용해서 정렬 순서를 지정한다. 숫자나 문자열에 대해서는 asc()나 desc()를 사용하고, OrderSpecifier에 접근하기 위해 다른 비교 표현식을 사용한다.
+
+*limit, offset, restrict*: 결과의 페이징을 설정한다. limit은 최대 결과 개수, offset은 결과의 시작 행, restrict는 limit과 offset을 함께 정의한다.
+
+
+### 2.6.4 정렬
+
+정렬 구문은 다음과 같다.
+
+```
+query
+    .where(doc.title.like("*"))
+    .orderBy(doc.title.asc(), doc.year.desc())
+    .list();
+```
+title과 year의 오름차순으로 결과를 정렬한다.
+
+### 2.6.5 결과 개수 제한
+
+다음과 같이 결과 개수를 제한한다.
+
+```
+query
+    .where(doc.title.like("*"))
+    .limit(10)
+    .list();
+```
+
+### 2.6.6 오프셋
+다음과 같이 오프셋을 지정한다.
+```
+query
+    .where(doc.title.like("*"))
+    .offset(3)
+    .list();
+```
+
+### 2.6.7 공간 쿼리
+near(Douyble[]) 메서드를 이용해서 공간 검색을 할 수 있다.
+```
+query
+    .where(geoEntity.location.near(50.0, 50.0))
+    .list();
+```
+
+### 2.6.8 관련 필드만 선택하기
+
+관련 필드만 선택하고 싶다면, 선택 대상 목록을 갖는 list, iterate, uniqueResult, singleResult 메서드를 사용하면 된다.
+```
+query
+    .where(doc.title.like("*"))
+    .list(doc.title, doc.path);
+```
+이 쿼리는 문서의 title과 path 필드만 조회한다.
+
+## 2.7 콜렉션 쿼리
+**[생략함]**
+
+## 2.8 스카라에서의 쿼리
+**[생략함]**
