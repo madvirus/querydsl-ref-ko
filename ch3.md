@@ -475,7 +475,8 @@ public class QTimestamp extends DateTimePath<java.sql.Timestamp> {
 @QueryEntities 어노테이션을 만들면, 어노테이션이 적용되지 않은 타입에 대해서도 Querydsl 쿼리 타입을 생성하는 것이 가능하다. QueryEntities 어노테이션을 선택한 패키지에 넣고, value 속성에 복제할 클래스를 값으로 지정한다.
 
 실제로 타입을 생성하려면 com.mysema.query.apt.QuerydslAnnotationProcessor를 사용한다. 메이븐 설정 방법은 다음과 같다.
-'''
+
+```
 <project>
   <build>
   <plugins>
@@ -500,7 +501,8 @@ public class QTimestamp extends DateTimePath<java.sql.Timestamp> {
   </plugins>
   </build>
 </project>
-'''
+```
+
 ### 3.3.6 클래스패스 기반 코드 생성
 어노테이션이 적용된 자바 소스를 사용할 수 없는 경우(예를 들어, Scala나 Groovy와 같은 다른 JVM 언어를 사용했거나, 바이트코드 조작을 이용해서 어노테이션을 추가한 경우 등), GenericExporter 클래스를 사용해서 클래스패스에서 어노테이션이 적용된 클래스를 스캔하고 검색된 클래스를 위한 쿼리 타입을 생성할 수 있다.
 GenericExporter를 사용하려면 querydsl-codegen 모듈을 의존에 추가해주어야 한다. (더 정확하게는 com.mysema.querydsl:querydsl-codegen:${querydsl.version} 모듈)
@@ -540,7 +542,7 @@ String | sourceEncoding | 생성할 소스 파일의 캐릭터 인코딩
 boolean | testClasspath | 테스트 클래스패스를 사용하려면 true
 
 다음은 JPA 어노테이션이 적용된 클래스를 위한 예이다.
-'''
+```
 <plugin>
   <groupId>com.mysema.querydsl</groupId>
   <artifactId>querydsl-maven-plugin</artifactId>
@@ -560,12 +562,12 @@ boolean | testClasspath | 테스트 클래스패스를 사용하려면 true
     </execution>
   </executions>
 </plugin>
-'''
+```
 위 메이븐 설정은 com.example.domain 및 그 하위 패키지의 JPA 어노테이션 적용 클래스를 찾아 target/generated-sources/java 디렉토리에 코드를 생성한다.
 
 생성 후에, 직접 생성된 소스를 컴파일하려면 그 소스 폴더를 위한 compile 골을 사용하면 된다.
 
-'''
+```
 <execution>
   <goals>
     <goal>compile</goal>
@@ -574,7 +576,7 @@ boolean | testClasspath | 테스트 클래스패스를 사용하려면 true
     <sourceFolder>target/generated-sources/scala</targetFolder>
   </configuration>
 </execution>
-'''
+```
 
 compile 골은 다음 설정 엘리먼트를 갖는다.
 
